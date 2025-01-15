@@ -1,14 +1,14 @@
-
 export default function handler(req, res) {
   // Get the tagId from the URL
   const { tagId } = req.query;
 
-  // For testing: if tagId is 'test123', redirect to WhatsApp, otherwise to setup
+  // Log the tagId to see what we're receiving
+  console.log('Received tagId:', tagId);
+
+  // Simple response to test the route is working
   if (tagId === 'test123') {
-    // Replace this URL with your actual WhatsApp link
-    res.redirect('https://wa.me/1234567890');
+    return res.redirect(302, 'https://wa.me/1234567890');
   } else {
-    // Replace with your actual setup page URL
-    res.redirect('https://yoursite.webflow.io/setup');
+    return res.redirect(302, 'https://webflow.io');  // Replace with your actual setup page URL
   }
 }
