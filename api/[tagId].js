@@ -1,14 +1,24 @@
-export default function handler(req, res) {
-  // Get the tagId from the URL
-  const { tagId } = req.query;
+export const config = {
+  runtime: 'edge',
+};
 
-  // Log the tagId to see what we're receiving
-  console.log('Received tagId:', tagId);
+export default async function handler(request) {
+  const url = new URL(request.url);
+  const tagId = url.pathname.split('/').pop();
 
-  // Simple response to test the route is working
   if (tagId === 'test123') {
-    return res.redirect(302, 'https://wa.me/1234567890');
+    return new Response(null, {
+      status: 302,
+      headers: {
+        'Location': 'https://wa.me/1234567890'
+      }
+    });
   } else {
-    return res.redirect(302, 'https://webflow.io');  // Replace with your actual setup page URL
+    return new Response(null, {
+      status: 302,
+      headers: {
+        'Location': 'https://webflow.io'
+      }
+    });
   }
 }
