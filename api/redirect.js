@@ -17,13 +17,14 @@ export default async function handler(request) {
     });
 
     const data = await response.json();
-    const record = data.records.find(r => r.fields.tagId === tagId);
+    // Updated to match your Airtable column names
+    const record = data.records.find(r => r.fields['Tag ID'] === tagId);
 
-    if (record?.fields?.status === 'Active') {
+    if (record?.fields['Status'] === 'Active') {
       return new Response(null, {
         status: 302,
         headers: {
-          'Location': 'https://wa.me/1234567890'
+          'Location': record.fields['WhatsApp URL']  // Use the actual WhatsApp URL from Airtable
         }
       });
     } else {
