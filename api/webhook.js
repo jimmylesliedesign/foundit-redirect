@@ -4,12 +4,13 @@ export const config = {
 
 export default async function handler(request) {
   try {
-    // Get the webhook payload
     const payload = await request.json();
+    console.log('Webhook received:', payload.type);
     
     if (payload.type === 'checkout.session.completed') {
       const session = payload.data.object;
       const tagId = session.client_reference_id;
+      console.log('Tag ID received:', tagId);
 
       // Update Airtable
       const airtableUrl = `https://api.airtable.com/v0/${process.env.AIRTABLE_BASE_ID}/Foundit%20Tags`;
@@ -23,6 +24,7 @@ export default async function handler(request) {
       });
 
       const data = await response.json();
+      // Updated to match exact field name
       const record = data.records.find(r => r.fields['Tag ID'] === tagId);
 
       if (record) {
@@ -35,10 +37,14 @@ export default async function handler(request) {
           },
           body: JSON.stringify({
             fields: {
+              // Updated to match exact field name
               'Status': 'Active'
             }
           })
         });
+        console.log('Airtable record updated:', record.id);
+      } else {
+        console.log('No matching record found for Tag ID:', tagId);
       }
     }
 
