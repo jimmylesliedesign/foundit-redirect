@@ -1,32 +1,33 @@
-exports.handler = async (event) => {
+const Airtable = require('airtable');
+const base = new Airtable({apiKey: 'YOUR_AIRTABLE_API_KEY'}).base('YOUR_BASE_ID');
+
+app.post('/stripe-webhook', async (req, res) => {
   try {
-    // Verify the webhook is from Stripe
-    const signature = event.headers['stripe-signature'];
-    let webhookEvent;
-    try {
-      webhookEvent = stripe.webhooks.constructEvent(
-        event.body,
-        signature,
-        process.env.STRIPE_WEBHOOK_SECRET
-      );
-    } catch (err) {
-      console.error(`Webhook signature verification failed.`);
-      return { statusCode: 400, body: `Webhook error: ${err.message}` };
+    const tagId = req.body.tagId; // Extract tagId from Stripe webhook data
+
+    // Find the Airtable record with the matching tagId
+    const records = await base('Tags').select({
+      filterByFormula: `{Tag ID} = '${tagId}'`
+    }).firstPage();
+
+    if (records.length > 0) {
+      // Update the "Status" field to "Active"
+      await base('Tags').update([
+        {
+          "id": records[0].id,
+          "fields": {
+            "Status": "Active"
+          }
+        }
+      ]);
+      console.log('Airtable record updated successfully!');
+    } else {
+      console.log('Airtable record not found for tagId:', tagId);
     }
 
-    // Extract the Tag ID from the webhook data
-    const { tagId } = webhookEvent.data.object;
-
-    // Update the Airtable record using the Tag ID
-    await updateAirtableRecord(tagId, 'Active');
-
-    return { statusCode: 200, body: 'Webhook processed successfully' };
+    res.sendStatus(200); // Send a success response to Stripe
   } catch (err) {
-    console.error(`Error processing Stripe webhook: ${err.message}`);
-    return { statusCode: 500, body: `Webhook processing error: ${err.message}` };
+    console.error('Error updating Airtable:', err);
+    res.sendStatus(500); // Send an error response to Stripe
   }
-};
-
-async function updateAirtableRecord(tagId, status) {
-  // Code to update the Airtable record using the Tag ID and new status
-}
+});
