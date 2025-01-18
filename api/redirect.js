@@ -30,7 +30,7 @@ export default async function handler(request) {
       return new Response(null, {
         status: 302,
         headers: {
-          'Location': 'https://webflow.io'
+          'Location': 'https://foundit-tags.webflow.io/'
         }
       });
     }
