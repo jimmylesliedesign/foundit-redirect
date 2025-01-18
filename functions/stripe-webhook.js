@@ -1,5 +1,5 @@
 const Airtable = require('airtable');
-const base = new Airtable({apiKey: 'YOUR_AIRTABLE_API_KEY'}).base('YOUR_BASE_ID');
+const base = new Airtable({apiKey: 'patFFjwwJRg8pqusV.4b9ec9157b2b67490d25df57443db8a6c27db514401d1a4c5aedc03c5580fd73'}).base('YOUR_BASE_ID');
 
 app.post('/stripe-webhook', async (req, res) => {
   try {
