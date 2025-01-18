@@ -5,15 +5,16 @@ export const config = {
 export default async function handler(request) {
   try {
     const payload = await request.json();
-    console.log('Webhook received:', payload.type);
+    console.log('1. Webhook received:', payload.type);
     
     if (payload.type === 'checkout.session.completed') {
       const session = payload.data.object;
       const tagId = session.client_reference_id;
-      console.log('Tag ID received:', tagId);
+      console.log('2. Tag ID from session:', tagId);
 
       // Update Airtable
       const airtableUrl = `https://api.airtable.com/v0/${process.env.AIRTABLE_BASE_ID}/Foundit%20Tags`;
+      console.log('3. Using Airtable URL:', airtableUrl);
       
       // First get the record to update
       const response = await fetch(airtableUrl, {
@@ -24,12 +25,15 @@ export default async function handler(request) {
       });
 
       const data = await response.json();
-      // Updated to match exact field name
+      console.log('4. Airtable response:', data);
+
       const record = data.records.find(r => r.fields['Tag ID'] === tagId);
+      console.log('5. Found record:', record);
 
       if (record) {
+        console.log('6. Attempting to update record ID:', record.id);
         // Update the record
-        await fetch(`${airtableUrl}/${record.id}`, {
+        const updateResponse = await fetch(`${airtableUrl}/${record.id}`, {
           method: 'PATCH',
           headers: {
             'Authorization': `Bearer ${process.env.AIRTABLE_TOKEN}`,
@@ -37,12 +41,13 @@ export default async function handler(request) {
           },
           body: JSON.stringify({
             fields: {
-              // Updated to match exact field name
               'Status': 'Active'
             }
           })
         });
-        console.log('Airtable record updated:', record.id);
+        
+        const updateResult = await updateResponse.json();
+        console.log('7. Update result:', updateResult);
       } else {
         console.log('No matching record found for Tag ID:', tagId);
       }
