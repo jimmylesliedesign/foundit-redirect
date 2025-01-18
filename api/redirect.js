@@ -1,3 +1,7 @@
+export const config = {
+  runtime: 'edge'
+};
+
 export default async function handler(request) {
   try {
     const url = new URL(request.url);
@@ -23,12 +27,10 @@ export default async function handler(request) {
         }
       });
     } else {
-      // This is the line we're changing
       return new Response(null, {
         status: 302,
         headers: {
-          // Change this to your actual Webflow signup URL
-          'Location': `https://yoursite.webflow.io/setup?tagId=${tagId}`
+          'Location': 'https://foundit-tags.webflow.io/'
         }
       });
     }
