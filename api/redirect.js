@@ -7,15 +7,16 @@ export default async function handler(request) {
   if (request.method === 'POST') {
     try {
       const payload = await request.json();
-      console.log('Webhook received:', payload.type);
+      console.log('1. Webhook received:', payload.type);
 
       if (payload.type === 'checkout.session.completed') {
         const session = payload.data.object;
         const tagId = session.client_reference_id;
-        console.log('Processing tag:', tagId);
+        console.log('2. TagID from session:', tagId);
 
         // Update Airtable
         const airtableUrl = `https://api.airtable.com/v0/${process.env.AIRTABLE_BASE_ID}/Foundit%20Tags`;
+        console.log('3. Airtable URL:', airtableUrl);
         
         const response = await fetch(airtableUrl, {
           headers: {
@@ -25,10 +26,14 @@ export default async function handler(request) {
         });
 
         const data = await response.json();
+        console.log('4. Airtable response:', data);
+
         const record = data.records.find(r => r.fields['Tag ID'] === tagId);
+        console.log('5. Found record:', record);
 
         if (record) {
-          await fetch(`${airtableUrl}/${record.id}`, {
+          console.log('6. Attempting to update record:', record.id);
+          const updateResponse = await fetch(`${airtableUrl}/${record.id}`, {
             method: 'PATCH',
             headers: {
               'Authorization': `Bearer ${process.env.AIRTABLE_TOKEN}`,
@@ -40,6 +45,10 @@ export default async function handler(request) {
               }
             })
           });
+          const updateResult = await updateResponse.json();
+          console.log('7. Update result:', updateResult);
+        } else {
+          console.log('No matching record found for TagID:', tagId);
         }
       }
 
