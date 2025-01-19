@@ -11,12 +11,14 @@ export default async function handler(request) {
 
       if (payload.type === 'checkout.session.completed') {
         const session = payload.data.object;
+        console.log('Full session data:', JSON.stringify(session, null, 2));
         const tagId = session.client_reference_id;
-        console.log('2. TagID from session:', tagId);
+        console.log('Tag ID we got:', tagId);
+        console.log('Looking for Tag ID:', tagId);
 
         // Update Airtable
         const airtableUrl = `https://api.airtable.com/v0/${process.env.AIRTABLE_BASE_ID}/Foundit%20Tags`;
-        console.log('3. Airtable URL:', airtableUrl);
+        console.log('Airtable URL:', airtableUrl);
         
         const response = await fetch(airtableUrl, {
           headers: {
@@ -26,10 +28,13 @@ export default async function handler(request) {
         });
 
         const data = await response.json();
-        console.log('4. Airtable response:', data);
+        console.log('All Airtable records:', JSON.stringify(data, null, 2));
 
-        const record = data.records.find(r => r.fields['Tag ID'] === tagId);
-        console.log('5. Found record:', record);
+        const record = data.records.find(r => {
+          console.log('Checking record:', r.fields['Tag ID']);
+          return r.fields['Tag ID'] === tagId;
+        });
+        console.log('Found matching record:', record);
 
         if (record) {
           console.log('6. Attempting to update record:', record.id);
