@@ -7,18 +7,28 @@ export default async function handler(request) {
   if (request.method === 'POST') {
     try {
       const payload = await request.json();
-      console.log('1. Webhook received:', payload.type);
+      console.log('1. Webhook type received:', payload.type);
 
       if (payload.type === 'checkout.session.completed') {
         const session = payload.data.object;
-        console.log('Full session data:', JSON.stringify(session, null, 2));
+        console.log('2. Full Stripe session:', JSON.stringify(session, null, 2));
+        console.log('3. URL from session:', session.url);
+        
         const tagId = session.client_reference_id;
-        console.log('Tag ID we got:', tagId);
-        console.log('Looking for Tag ID:', tagId);
+        console.log('4. Tag ID from Stripe:', tagId);
+        console.log('5. Session metadata:', session.metadata);
+
+        if (!tagId) {
+          console.log('WARNING: No Tag ID received from Stripe!');
+          return new Response(JSON.stringify({ received: true, warning: 'No Tag ID' }), {
+            status: 200,
+            headers: { 'Content-Type': 'application/json' }
+          });
+        }
 
         // Update Airtable
         const airtableUrl = `https://api.airtable.com/v0/${process.env.AIRTABLE_BASE_ID}/Foundit%20Tags`;
-        console.log('Airtable URL:', airtableUrl);
+        console.log('6. Checking Airtable at:', airtableUrl);
         
         const response = await fetch(airtableUrl, {
           headers: {
@@ -28,16 +38,17 @@ export default async function handler(request) {
         });
 
         const data = await response.json();
-        console.log('All Airtable records:', JSON.stringify(data, null, 2));
+        console.log('7. Airtable records:', JSON.stringify(data, null, 2));
 
         const record = data.records.find(r => {
-          console.log('Checking record:', r.fields['Tag ID']);
+          console.log('8. Checking record Tag ID:', r.fields['Tag ID'], 'against:', tagId);
           return r.fields['Tag ID'] === tagId;
         });
-        console.log('Found matching record:', record);
+        
+        console.log('9. Found record:', record ? 'Yes' : 'No', record);
 
         if (record) {
-          console.log('6. Attempting to update record:', record.id);
+          console.log('10. Attempting to update record:', record.id);
           const updateResponse = await fetch(`${airtableUrl}/${record.id}`, {
             method: 'PATCH',
             headers: {
@@ -51,9 +62,9 @@ export default async function handler(request) {
             })
           });
           const updateResult = await updateResponse.json();
-          console.log('7. Update result:', updateResult);
+          console.log('11. Update result:', updateResult);
         } else {
-          console.log('No matching record found for TagID:', tagId);
+          console.log('ERROR: No matching record found for Tag ID:', tagId);
         }
       }
 
@@ -70,7 +81,7 @@ export default async function handler(request) {
     }
   }
 
-  // For GET requests, handle the normal redirect
+  // For GET requests, handle the normal redirect (unchanged)
   try {
     const url = new URL(request.url);
     const tagId = url.pathname.slice(1);
