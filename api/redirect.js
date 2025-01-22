@@ -2,11 +2,6 @@ export const config = {
   runtime: 'edge',
 };
 
-function generateToken(tagId) {
-  const timestamp = Date.now();
-  return btoa(`${tagId}:${timestamp}`);
-}
-
 export default async function handler(request) {
   if (request.method === 'POST') {
     try {
@@ -98,11 +93,10 @@ export default async function handler(request) {
         }
       });
     } else {
-      const setupToken = generateToken(tagId);
       return new Response(null, {
         status: 302,
         headers: {
-          'Location': `https://foundit-tags.webflow.io/sign-up?tagId=${tagId}&token=${setupToken}`
+          'Location': `https://foundit-tags.webflow.io/sign-up?tagId=${tagId}`
         }
       });
     }
