@@ -9,11 +9,20 @@ export default async function handler(request) {
     if (payload.type === 'checkout.session.completed') {
       const session = payload.data.object;
       const tagId = session.client_reference_id;
-      const customerEmail = session.customer.email;
+      // Try getting email from customer_details
+      const customerEmail = session.customer_details?.email || session.customer?.email;
 
-      console.log('Customer Email:', customerEmail); // Verify email
+      console.log('Customer Email:', customerEmail);
       
+      if (!customerEmail) {
+        console.error('No email found in session');
+        return new Response(JSON.stringify({ error: 'No email found' }), {
+          status: 400
+        });
+      }
+
       const airtableUrl = `https://api.airtable.com/v0/${process.env.AIRTABLE_BASE_ID}/Foundit%20Tags`;
+      
       const response = await fetch(airtableUrl, {
         headers: {
           'Authorization': `Bearer ${process.env.AIRTABLE_TOKEN}`,
@@ -25,43 +34,27 @@ export default async function handler(request) {
       const record = data.records.find(r => r.fields['Tag ID'] === tagId);
 
       if (record) {
-        const updateBody = {
-          fields: {
-            'Status': 'Active',
-            'Email': customerEmail
-          }
-        };
-        
-        console.log('Airtable Update Payload:', JSON.stringify(updateBody));
-
         const updateResponse = await fetch(`${airtableUrl}/${record.id}`, {
           method: 'PATCH',
           headers: {
             'Authorization': `Bearer ${process.env.AIRTABLE_TOKEN}`,
             'Content-Type': 'application/json'
           },
-          body: JSON.stringify(updateBody)
+          body: JSON.stringify({
+            fields: {
+              'Status': 'Active',
+              'Email': customerEmail
+            }
+          })
         });
         
-        if (!updateResponse.ok) {
-          const errorText = await updateResponse.text();
-          console.error('Airtable Error:', errorText);
-        } else {
-          const result = await updateResponse.json();
-          console.log('Airtable Success:', JSON.stringify(result));
-        }
+        console.log('Airtable Response:', await updateResponse.text());
       }
     }
 
-    return new Response(JSON.stringify({ received: true }), {
-      status: 200,
-      headers: { 'Content-Type': 'application/json' }
-    });
+    return new Response(JSON.stringify({ received: true }));
   } catch (error) {
     console.error('Error:', error);
-    return new Response(JSON.stringify({ error: error.message }), {
-      status: 400,
-      headers: { 'Content-Type': 'application/json' }
-    });
+    return new Response(JSON.stringify({ error: error.message }), { status: 400 });
   }
 }
