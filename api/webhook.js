@@ -5,30 +5,30 @@ export const config = {
 export default async function handler(request) {
   try {
     const payload = await request.json();
+    console.log('Webhook payload type:', payload.type);
     
     if (payload.type === 'checkout.session.completed') {
       const session = payload.data.object;
       const tagId = session.client_reference_id;
-      const customerEmail = session.customer.email;
+      const customerEmail = session.payment_intent.payment_method?.billing_details?.email 
+        || session.customer?.email;
+
+      console.log('Processing:', { tagId, customerEmail });
 
       const airtableUrl = `https://api.airtable.com/v0/${process.env.AIRTABLE_BASE_ID}/Foundit%20Tags`;
-      const getResponse = await fetch(airtableUrl, {
+      
+      const response = await fetch(airtableUrl, {
         headers: {
-          'Authorization': `Bearer ${process.env.AIRTABLE_TOKEN}`,
-          'Content-Type': 'application/json'
+          'Authorization': `Bearer ${process.env.AIRTABLE_TOKEN}`
         }
       });
 
-      const data = await getResponse.json();
+      const data = await response.json();
       const record = data.records.find(r => r.fields['Tag ID'] === tagId);
 
       if (record) {
-        console.log('Updating record:', {
-          id: record.id,
-          tagId,
-          email: customerEmail
-        });
-
+        console.log('Found record:', record.id);
+        
         const updateResponse = await fetch(`${airtableUrl}/${record.id}`, {
           method: 'PATCH',
           headers: {
@@ -36,18 +36,15 @@ export default async function handler(request) {
             'Content-Type': 'application/json'
           },
           body: JSON.stringify({
-            records: [{
-              id: record.id,
-              fields: {
-                'Status': 'Active',
-                'Email': customerEmail
-              }
-            }]
+            fields: {
+              'Status': 'Active',
+              'Email': customerEmail
+            }
           })
         });
 
-        const updateResult = await updateResponse.json();
-        console.log('Update result:', updateResult);
+        const result = await updateResponse.json();
+        console.log('Update result:', result);
       }
     }
 
@@ -57,6 +54,9 @@ export default async function handler(request) {
     });
   } catch (error) {
     console.error('Error:', error);
-    return new Response(JSON.stringify({ error: error.message }), { status: 400 });
+    return new Response(JSON.stringify({ error: error.message }), { 
+      status: 400,
+      headers: { 'Content-Type': 'application/json' }
+    });
   }
 }
