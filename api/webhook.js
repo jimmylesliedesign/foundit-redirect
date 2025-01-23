@@ -5,50 +5,51 @@ export const config = {
 export default async function handler(request) {
   try {
     const payload = await request.json();
+    console.log('Full Stripe payload:', JSON.stringify(payload.data.object, null, 2));
     
     if (payload.type === 'checkout.session.completed') {
       const session = payload.data.object;
       const tagId = session.client_reference_id;
-      // Try getting email from customer_details
-      const customerEmail = session.customer_details?.email || session.customer?.email;
+      const customerEmail = session.customer.email;
 
-      console.log('Customer Email:', customerEmail);
-      
-      if (!customerEmail) {
-        console.error('No email found in session');
-        return new Response(JSON.stringify({ error: 'No email found' }), {
-          status: 400
-        });
-      }
-
+      // First, get current record
       const airtableUrl = `https://api.airtable.com/v0/${process.env.AIRTABLE_BASE_ID}/Foundit%20Tags`;
-      
-      const response = await fetch(airtableUrl, {
+      const getResponse = await fetch(airtableUrl, {
         headers: {
           'Authorization': `Bearer ${process.env.AIRTABLE_TOKEN}`,
           'Content-Type': 'application/json'
         }
       });
 
-      const data = await response.json();
+      const data = await getResponse.json();
+      console.log('Airtable GET response:', JSON.stringify(data, null, 2));
+
       const record = data.records.find(r => r.fields['Tag ID'] === tagId);
 
       if (record) {
+        // Log current record state
+        console.log('Found record:', JSON.stringify(record, null, 2));
+        
+        const updateBody = {
+          fields: {
+            'Status': 'Active',
+            'Email': customerEmail
+          }
+        };
+
+        console.log('Sending update to Airtable:', JSON.stringify(updateBody, null, 2));
+
         const updateResponse = await fetch(`${airtableUrl}/${record.id}`, {
           method: 'PATCH',
           headers: {
             'Authorization': `Bearer ${process.env.AIRTABLE_TOKEN}`,
             'Content-Type': 'application/json'
           },
-          body: JSON.stringify({
-            fields: {
-              'Status': 'Active',
-              'Email': customerEmail
-            }
-          })
+          body: JSON.stringify(updateBody)
         });
-        
-        console.log('Airtable Response:', await updateResponse.text());
+
+        const updateResult = await updateResponse.json();
+        console.log('Airtable update response:', JSON.stringify(updateResult, null, 2));
       }
     }
 
