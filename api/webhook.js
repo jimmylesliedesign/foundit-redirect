@@ -5,57 +5,59 @@ export const config = {
 export default async function handler(request) {
   try {
     const payload = await request.json();
-    console.log('Full Stripe payload:', JSON.stringify(payload.data.object, null, 2));
+    const session = payload.data.object;
     
     if (payload.type === 'checkout.session.completed') {
-      const session = payload.data.object;
       const tagId = session.client_reference_id;
-      const customerEmail = session.customer.email;
+      const customerEmail = session.customer?.email;
 
-      // First, get current record
+      if (!customerEmail) {
+        throw new Error('No email found in session');
+      }
+
       const airtableUrl = `https://api.airtable.com/v0/${process.env.AIRTABLE_BASE_ID}/Foundit%20Tags`;
-      const getResponse = await fetch(airtableUrl, {
+
+      // First get the record
+      const response = await fetch(airtableUrl, {
         headers: {
-          'Authorization': `Bearer ${process.env.AIRTABLE_TOKEN}`,
-          'Content-Type': 'application/json'
+          'Authorization': `Bearer ${process.env.AIRTABLE_TOKEN}`
         }
       });
 
-      const data = await getResponse.json();
-      console.log('Airtable GET response:', JSON.stringify(data, null, 2));
-
+      const data = await response.json();
       const record = data.records.find(r => r.fields['Tag ID'] === tagId);
 
       if (record) {
-        // Log current record state
-        console.log('Found record:', JSON.stringify(record, null, 2));
-        
-        const updateBody = {
-          fields: {
-            'Status': 'Active',
-            'Email': customerEmail
-          }
-        };
-
-        console.log('Sending update to Airtable:', JSON.stringify(updateBody, null, 2));
-
+        // Update with both status and email
         const updateResponse = await fetch(`${airtableUrl}/${record.id}`, {
           method: 'PATCH',
           headers: {
             'Authorization': `Bearer ${process.env.AIRTABLE_TOKEN}`,
             'Content-Type': 'application/json'
           },
-          body: JSON.stringify(updateBody)
+          body: JSON.stringify({
+            fields: {
+              'Status': 'Active',
+              'Email': customerEmail // Ensure exact field name match
+            }
+          })
         });
 
-        const updateResult = await updateResponse.json();
-        console.log('Airtable update response:', JSON.stringify(updateResult, null, 2));
+        if (!updateResponse.ok) {
+          throw new Error('Failed to update Airtable record');
+        }
       }
     }
 
-    return new Response(JSON.stringify({ received: true }));
+    return new Response(JSON.stringify({ received: true }), {
+      status: 200,
+      headers: { 'Content-Type': 'application/json' }
+    });
   } catch (error) {
-    console.error('Error:', error);
-    return new Response(JSON.stringify({ error: error.message }), { status: 400 });
+    console.error('Webhook error:', error);
+    return new Response(JSON.stringify({ error: error.message }), {
+      status: 400,
+      headers: { 'Content-Type': 'application/json' }
+    });
   }
 }
