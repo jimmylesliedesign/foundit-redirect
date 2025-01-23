@@ -9,35 +9,29 @@ export default async function handler(request) {
     if (payload.type === 'checkout.session.completed') {
       const session = payload.data.object;
       const tagId = session.client_reference_id;
-      const customerEmail = session.customer?.email;
+      const customerEmail = session.customer.email; // Direct access to customer.email
       
-      console.log('DEBUG - Full session:', JSON.stringify(session, null, 2));
-      console.log('DEBUG - Customer email:', customerEmail);
-      console.log('DEBUG - Tag ID:', tagId);
+      console.log('DEBUG:', { tagId, customerEmail });
 
       const airtableUrl = `https://api.airtable.com/v0/${process.env.AIRTABLE_BASE_ID}/Foundit%20Tags`;
-      
-      const getResponse = await fetch(airtableUrl, {
+      const response = await fetch(airtableUrl, {
         headers: {
           'Authorization': `Bearer ${process.env.AIRTABLE_TOKEN}`,
           'Content-Type': 'application/json'
         }
       });
 
-      const data = await getResponse.json();
-      console.log('DEBUG - Airtable GET response:', JSON.stringify(data, null, 2));
-
+      const data = await response.json();
       const record = data.records.find(r => r.fields['Tag ID'] === tagId);
 
       if (record) {
-        const updatePayload = {
-          fields: {
-            'Status': 'Active',
-            'Email': customerEmail
-          }
+        // Try setting email field explicitly
+        const fields = {
+          'Status': 'Active',
+          'Email': customerEmail.toString() // Ensure string type
         };
         
-        console.log('DEBUG - Airtable update payload:', JSON.stringify(updatePayload, null, 2));
+        console.log('DEBUG - Update payload:', fields);
         
         const updateResponse = await fetch(`${airtableUrl}/${record.id}`, {
           method: 'PATCH',
@@ -45,11 +39,11 @@ export default async function handler(request) {
             'Authorization': `Bearer ${process.env.AIRTABLE_TOKEN}`,
             'Content-Type': 'application/json'
           },
-          body: JSON.stringify(updatePayload)
+          body: JSON.stringify({ fields })
         });
         
         const updateResult = await updateResponse.json();
-        console.log('DEBUG - Airtable update response:', JSON.stringify(updateResult, null, 2));
+        console.log('DEBUG - Update result:', updateResult);
       }
     }
 
@@ -58,7 +52,7 @@ export default async function handler(request) {
       headers: { 'Content-Type': 'application/json' }
     });
   } catch (error) {
-    console.error('DEBUG - Error:', error);
+    console.error('Error:', error);
     return new Response(JSON.stringify({ error: error.message }), {
       status: 400,
       headers: { 'Content-Type': 'application/json' }
