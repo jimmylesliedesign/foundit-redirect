@@ -9,10 +9,10 @@ export default async function handler(request) {
     if (payload.type === 'checkout.session.completed') {
       const session = payload.data.object;
       const tagId = session.client_reference_id;
-      const customerEmail = session.customer.email; // Direct access to customer.email
-      
-      console.log('DEBUG:', { tagId, customerEmail });
+      const customerEmail = session.customer.email;
 
+      console.log('Customer Email:', customerEmail); // Verify email
+      
       const airtableUrl = `https://api.airtable.com/v0/${process.env.AIRTABLE_BASE_ID}/Foundit%20Tags`;
       const response = await fetch(airtableUrl, {
         headers: {
@@ -25,25 +25,31 @@ export default async function handler(request) {
       const record = data.records.find(r => r.fields['Tag ID'] === tagId);
 
       if (record) {
-        // Try setting email field explicitly
-        const fields = {
-          'Status': 'Active',
-          'Email': customerEmail.toString() // Ensure string type
+        const updateBody = {
+          fields: {
+            'Status': 'Active',
+            'Email': customerEmail
+          }
         };
         
-        console.log('DEBUG - Update payload:', fields);
-        
+        console.log('Airtable Update Payload:', JSON.stringify(updateBody));
+
         const updateResponse = await fetch(`${airtableUrl}/${record.id}`, {
           method: 'PATCH',
           headers: {
             'Authorization': `Bearer ${process.env.AIRTABLE_TOKEN}`,
             'Content-Type': 'application/json'
           },
-          body: JSON.stringify({ fields })
+          body: JSON.stringify(updateBody)
         });
         
-        const updateResult = await updateResponse.json();
-        console.log('DEBUG - Update result:', updateResult);
+        if (!updateResponse.ok) {
+          const errorText = await updateResponse.text();
+          console.error('Airtable Error:', errorText);
+        } else {
+          const result = await updateResponse.json();
+          console.log('Airtable Success:', JSON.stringify(result));
+        }
       }
     }
 
