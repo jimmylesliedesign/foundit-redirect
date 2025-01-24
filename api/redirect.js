@@ -41,7 +41,10 @@ export default async function handler(request) {
             body: JSON.stringify({
               fields: {
                 'Status': 'Active',
-                'Email': customerEmail
+                'Email': customerEmail,
+                'Customer': record.fields['Customer'],
+                'Trusted Contact': record.fields['Trusted Contact'],
+                'Phone Number': record.fields['Phone Number']
               }
             })
           });
