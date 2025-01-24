@@ -3,15 +3,14 @@ export const config = {
 };
 
 export default async function handler(request) {
-  // If it's a POST request, handle it as a webhook
   if (request.method === 'POST') {
     try {
       const payload = await request.json();
 
       if (payload.type === 'checkout.session.completed') {
         const session = payload.data.object;
-        
         const tagId = session.client_reference_id;
+        const customerEmail = session.customer_details.email;
 
         if (!tagId) {
           return new Response(JSON.stringify({ received: true, warning: 'No Tag ID' }), {
@@ -20,7 +19,6 @@ export default async function handler(request) {
           });
         }
 
-        // Update Airtable
         const airtableUrl = `https://api.airtable.com/v0/${process.env.AIRTABLE_BASE_ID}/Foundit%20Tags`;
         
         const response = await fetch(airtableUrl, {
@@ -31,7 +29,6 @@ export default async function handler(request) {
         });
 
         const data = await response.json();
-
         const record = data.records.find(r => r.fields['Tag ID'] === tagId);
 
         if (record) {
@@ -43,7 +40,8 @@ export default async function handler(request) {
             },
             body: JSON.stringify({
               fields: {
-                'Status': 'Active'
+                'Status': 'Active',
+                'Email': customerEmail
               }
             })
           });
@@ -62,7 +60,6 @@ export default async function handler(request) {
     }
   }
 
-  // For GET requests, handle the normal redirect
   try {
     const url = new URL(request.url);
     const tagId = url.pathname.slice(1);
