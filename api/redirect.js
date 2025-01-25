@@ -3,6 +3,13 @@ export const config = {
 };
 
 export default async function handler(request) {
+  if (request.method === 'POST') {
+    return new Response(JSON.stringify({ received: true }), {
+      status: 200,
+      headers: { 'Content-Type': 'application/json' }
+    });
+  }
+
   try {
     const url = new URL(request.url);
     const tagId = url.pathname.slice(1);
