@@ -3,61 +3,8 @@ export const config = {
 };
 
 export default async function handler(request) {
-  if (request.method === 'POST') {
-    try {
-      const payload = await request.json();
-
-      if (payload.type === 'checkout.session.completed') {
-        const session = payload.data.object;
-        const tagId = session.client_reference_id;
-        const customerEmail = session.customer_details.email;
-
-        if (!tagId) {
-          return new Response(JSON.stringify({ received: true, warning: 'No Tag ID' }), {
-            status: 200,
-            headers: { 'Content-Type': 'application/json' }
-          });
-        }
-
-        const airtableUrl = `https://api.airtable.com/v0/${process.env.AIRTABLE_BASE_ID}/Foundit%20Tags`;
-        
-        const response = await fetch(airtableUrl, {
-          headers: {
-            'Authorization': `Bearer ${process.env.AIRTABLE_TOKEN}`,
-            'Content-Type': 'application/json'
-          }
-        });
-
-        const data = await response.json();
-        const record = data.records.find(r => r.fields['Tag ID'] === tagId);
-
-        if (record) {
-          await fetch(`${airtableUrl}/${record.id}`, {
-            method: 'PATCH',
-            headers: {
-              'Authorization': `Bearer ${process.env.AIRTABLE_TOKEN}`,
-              'Content-Type': 'application/json'
-            },
-            body: JSON.stringify({
-              fields: {
-                'Status': 'Active',
-                'Email': customerEmail
-              }
-            })
-          });
-        }
-      }
-
-      return new Response(JSON.stringify({ received: true }), {
-        status: 200,
-        headers: { 'Content-Type': 'application/json' }
-      });
-    } catch (error) {
-      return new Response(JSON.stringify({ error: error.message }), {
-        status: 400,
-        headers: { 'Content-Type': 'application/json' }
-      });
-    }
+  if (request.method !== 'GET') {
+    return new Response('Method not allowed', { status: 405 });
   }
 
   try {
@@ -65,7 +12,6 @@ export default async function handler(request) {
     const tagId = url.pathname.slice(1);
 
     const airtableUrl = `https://api.airtable.com/v0/${process.env.AIRTABLE_BASE_ID}/Foundit%20Tags`;
-    
     const response = await fetch(airtableUrl, {
       headers: {
         'Authorization': `Bearer ${process.env.AIRTABLE_TOKEN}`,
@@ -92,6 +38,7 @@ export default async function handler(request) {
       });
     }
   } catch (error) {
+    console.error('Redirect error:', error);
     return new Response(null, {
       status: 302,
       headers: {
