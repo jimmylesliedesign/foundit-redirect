@@ -5,7 +5,7 @@ export const config = {
 export default async function handler(request) {
   try {
     const url = new URL(request.url);
-    const tagId = url.pathname.slice(1);
+    const TagId = url.pathname.slice(1);
     const airtableUrl = `https://api.airtable.com/v0/${process.env.AIRTABLE_BASE_ID}/Foundit%20Tags`;
     
     const response = await fetch(airtableUrl, {
@@ -16,7 +16,7 @@ export default async function handler(request) {
     });
 
     const data = await response.json();
-    const record = data.records.find(r => r.fields['TagID'] === tagId);
+    const record = data.records.find(r => r.fields['TagID'] === TagId);
 
     if (record?.fields['Status'] === 'Active') {
       return new Response(null, {
@@ -29,7 +29,7 @@ export default async function handler(request) {
       return new Response(null, {
         status: 302,
         headers: {
-          'Location': `https://foundit-tags.webflow.io/sign-up?tagId=${tagId}`
+          'Location': `https://foundit-tags.webflow.io/sign-up?TagId=${TagId}`
         }
       });
     }
