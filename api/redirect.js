@@ -16,7 +16,7 @@ export default async function handler(request) {
     });
 
     const data = await response.json();
-    const record = data.records.find(r => r.fields['Tag ID'] === tagId);
+    const record = data.records.find(r => r.fields['TagID'] === tagId);
 
     if (record?.fields['Status'] === 'Active') {
       return new Response(null, {
