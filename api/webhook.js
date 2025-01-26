@@ -60,7 +60,7 @@ async function updateAirtableRecord(tagId, email) {
     const data = await response.json();
     console.log('Airtable response:', data);
     
-    const record = data.records.find(r => r.fields['Tag ID'] === tagId);
+    const record = data.records.find(r => r.fields['TagID'] === tagId);
     
     if (!record) {
       throw new Error(`No record found for tagId: ${tagId}`);
