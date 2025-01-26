@@ -19,25 +19,6 @@ export default async function handler(request) {
     const data = await response.json();
     const record = data.records?.[0];
 
-    if (!record) {
-      // Create new record if TagID doesn't exist
-      await fetch(airtableUrl, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${process.env.AIRTABLE_TOKEN}`,
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-          records: [{
-            fields: {
-              'TagID': tagId,
-              'Status': 'Not Active'
-            }
-          }]
-        })
-      });
-    }
-
     const redirectUrl = record?.fields['Status'] === 'Active' 
       ? record.fields['WhatsApp URL']
       : `https://foundit-tags.webflow.io/sign-up?tagId=${tagId}`;
