@@ -9,28 +9,21 @@ export default async function handler(request) {
 
   try {
     const payload = await request.json();
-    console.log('Received webhook payload:', payload);
     
-    const response = new Response(JSON.stringify({ received: true }), {
-      status: 200,
-      headers: { 'Content-Type': 'application/json' }
-    });
-
     if (payload.type === 'checkout.session.completed') {
       const session = payload.data.object;
       const tagId = session.client_reference_id;
       const email = session.customer_details.email;
       
-      console.log('Processing session:', { tagId, email });
-      
       if (tagId) {
-        updateAirtableRecord(tagId, email).catch(error => {
-          console.error('Airtable update failed:', error);
-        });
+        await updateAirtableRecord(tagId, email);
       }
     }
 
-    return response;
+    return new Response(JSON.stringify({ received: true }), {
+      status: 200,
+      headers: { 'Content-Type': 'application/json' }
+    });
 
   } catch (error) {
     console.error('Webhook processing error:', error);
@@ -43,10 +36,11 @@ export default async function handler(request) {
 
 async function updateAirtableRecord(tagId, email) {
   const airtableUrl = `https://api.airtable.com/v0/${process.env.AIRTABLE_BASE_ID}/Foundit%20Tags`;
+  const filterFormula = encodeURIComponent(`{TagID}='${tagId}'`);
   
   try {
     console.log('Fetching Airtable records for tagId:', tagId);
-    const response = await fetch(airtableUrl, {
+    const response = await fetch(`${airtableUrl}?filterByFormula=${filterFormula}`, {
       headers: {
         'Authorization': `Bearer ${process.env.AIRTABLE_TOKEN}`,
         'Content-Type': 'application/json'
@@ -54,19 +48,18 @@ async function updateAirtableRecord(tagId, email) {
     });
 
     if (!response.ok) {
-      throw new Error(`Airtable fetch failed: ${response.status}`);
+      const errorText = await response.text();
+      throw new Error(`Airtable fetch failed: ${response.status} - ${errorText}`);
     }
 
     const data = await response.json();
-    console.log('Airtable response:', data);
+    console.log('Airtable response:', JSON.stringify(data, null, 2));
     
-    const record = data.records.find(r => r.fields['TagID'] === tagId);
-    
-    if (!record) {
+    if (!data.records?.length) {
       throw new Error(`No record found for tagId: ${tagId}`);
     }
 
-    console.log('Updating record:', record.id);
+    const record = data.records[0];
     const updateResponse = await fetch(`${airtableUrl}/${record.id}`, {
       method: 'PATCH',
       headers: {
@@ -82,10 +75,9 @@ async function updateAirtableRecord(tagId, email) {
     });
 
     if (!updateResponse.ok) {
-      throw new Error(`Airtable update failed: ${updateResponse.status}`);
+      const errorText = await updateResponse.text();
+      throw new Error(`Airtable update failed: ${updateResponse.status} - ${errorText}`);
     }
-
-    console.log('Airtable update successful');
   } catch (error) {
     console.error('Error in updateAirtableRecord:', error);
     throw error;
