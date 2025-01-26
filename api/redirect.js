@@ -19,23 +19,16 @@ export default async function handler(request) {
     const data = await response.json();
     const record = data.records?.[0];
 
-    if (record?.fields['Status'] === 'Active') {
-      return new Response(null, {
-        status: 302,
-        headers: {
-          'Location': record.fields['WhatsApp URL']
-        }
-      });
-    } else {
-      return new Response(null, {
-        status: 302,
-        headers: {
-          'Location': `https://foundit-tags.webflow.io/sign-up?tagId=${tagId}`
-        }
-      });
-    }
+    const redirectUrl = record?.fields['Status'] === 'Active' 
+      ? record.fields['WhatsApp URL']
+      : `https://foundit-tags.webflow.io/sign-up?tagId=${tagId}`;
+
+    return new Response(null, {
+      status: 302,
+      headers: { 'Location': redirectUrl }
+    });
+
   } catch (error) {
-    console.error('Redirect error:', error);
     return new Response(null, {
       status: 302,
       headers: {
