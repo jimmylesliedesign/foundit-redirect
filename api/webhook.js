@@ -18,13 +18,13 @@ export default async function handler(request) {
 
     if (payload.type === 'checkout.session.completed') {
       const session = payload.data.object;
-      const tagId = session.client_reference_id;
+      const TagId = session.client_reference_id;
       const email = session.customer_details.email;
       
-      console.log('Processing session:', { tagId, email });
+      console.log('Processing session:', { TagId, Email });
       
-      if (tagId) {
-        updateAirtableRecord(tagId, email).catch(error => {
+      if (TagId) {
+        updateAirtableRecord(TagId, email).catch(error => {
           console.error('Airtable update failed:', error);
         });
       }
@@ -41,11 +41,11 @@ export default async function handler(request) {
   }
 }
 
-async function updateAirtableRecord(tagId, email) {
+async function updateAirtableRecord(TagId, email) {
   const airtableUrl = `https://api.airtable.com/v0/${process.env.AIRTABLE_BASE_ID}/Foundit%20Tags`;
   
   try {
-    console.log('Fetching Airtable records for tagId:', tagId);
+    console.log('Fetching Airtable records for TagId:', TagId);
     const response = await fetch(airtableUrl, {
       headers: {
         'Authorization': `Bearer ${process.env.AIRTABLE_TOKEN}`,
@@ -60,10 +60,10 @@ async function updateAirtableRecord(tagId, email) {
     const data = await response.json();
     console.log('Airtable response:', data);
     
-    const record = data.records.find(r => r.fields['TagID'] === tagId);
+    const record = data.records.find(r => r.fields['TagID'] === TagId);
     
     if (!record) {
-      throw new Error(`No record found for tagId: ${tagId}`);
+      throw new Error(`No record found for TagId: ${TagId}`);
     }
 
     console.log('Updating record:', record.id);
