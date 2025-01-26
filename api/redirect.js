@@ -8,7 +8,8 @@ export default async function handler(request) {
     const tagId = url.pathname.slice(1);
     const airtableUrl = `https://api.airtable.com/v0/${process.env.AIRTABLE_BASE_ID}/Foundit%20Tags`;
     
-    const response = await fetch(airtableUrl, {
+    const filterFormula = encodeURIComponent(`{TagID}='${tagId}'`);
+    const response = await fetch(`${airtableUrl}?filterByFormula=${filterFormula}`, {
       headers: {
         'Authorization': `Bearer ${process.env.AIRTABLE_TOKEN}`,
         'Content-Type': 'application/json'
@@ -16,7 +17,7 @@ export default async function handler(request) {
     });
 
     const data = await response.json();
-    const record = data.records.find(r => r.fields['TagID'] === tagId);
+    const record = data.records?.[0];
 
     if (record?.fields['Status'] === 'Active') {
       return new Response(null, {
@@ -34,6 +35,7 @@ export default async function handler(request) {
       });
     }
   } catch (error) {
+    console.error('Redirect error:', error);
     return new Response(null, {
       status: 302,
       headers: {
