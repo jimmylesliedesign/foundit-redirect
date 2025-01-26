@@ -40,7 +40,7 @@ export default async function handler(request) {
 
     const redirectUrl = record?.fields['Status'] === 'Active' 
       ? record.fields['WhatsApp URL']
-      : `https://foundit-tags.webflow.io/sign-up?tagId=${tagId}`;
+      : `https://foundit-tags.webflow.io/sign-up?tagId=${tagId}&verified=true`;
 
     return new Response(null, {
       status: 302,
@@ -51,7 +51,7 @@ export default async function handler(request) {
     return new Response(null, {
       status: 302,
       headers: {
-        'Location': 'https://foundit-tags.webflow.io/sign-up'
+        'Location': 'https://foundit-tags.webflow.io/404'
       }
     });
   }
