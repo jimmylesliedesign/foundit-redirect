@@ -9,8 +9,8 @@ export default async function handler(request) {
 
   try {
     const payload = await request.json();
+    console.log('Received webhook payload:', payload);
     
-    // Return success quickly for Stripe
     const response = new Response(JSON.stringify({ received: true }), {
       status: 200,
       headers: { 'Content-Type': 'application/json' }
@@ -21,15 +21,19 @@ export default async function handler(request) {
       const tagId = session.client_reference_id;
       const email = session.customer_details.email;
       
+      console.log('Processing session:', { tagId, email });
+      
       if (tagId) {
-        // Update Airtable asynchronously without waiting
-        updateAirtableRecord(tagId, email).catch(console.error);
+        updateAirtableRecord(tagId, email).catch(error => {
+          console.error('Airtable update failed:', error);
+        });
       }
     }
 
     return response;
 
   } catch (error) {
+    console.error('Webhook processing error:', error);
     return new Response(JSON.stringify({ error: error.message }), { 
       status: 400,
       headers: { 'Content-Type': 'application/json' }
@@ -40,18 +44,30 @@ export default async function handler(request) {
 async function updateAirtableRecord(tagId, email) {
   const airtableUrl = `https://api.airtable.com/v0/${process.env.AIRTABLE_BASE_ID}/Foundit%20Tags`;
   
-  const response = await fetch(airtableUrl, {
-    headers: {
-      'Authorization': `Bearer ${process.env.AIRTABLE_TOKEN}`,
-      'Content-Type': 'application/json'
+  try {
+    console.log('Fetching Airtable records for tagId:', tagId);
+    const response = await fetch(airtableUrl, {
+      headers: {
+        'Authorization': `Bearer ${process.env.AIRTABLE_TOKEN}`,
+        'Content-Type': 'application/json'
+      }
+    });
+
+    if (!response.ok) {
+      throw new Error(`Airtable fetch failed: ${response.status}`);
     }
-  });
 
-  const data = await response.json();
-  const record = data.records.find(r => r.fields['Tag ID'] === tagId);
+    const data = await response.json();
+    console.log('Airtable response:', data);
+    
+    const record = data.records.find(r => r.fields['Tag ID'] === tagId);
+    
+    if (!record) {
+      throw new Error(`No record found for tagId: ${tagId}`);
+    }
 
-  if (record) {
-    await fetch(`${airtableUrl}/${record.id}`, {
+    console.log('Updating record:', record.id);
+    const updateResponse = await fetch(`${airtableUrl}/${record.id}`, {
       method: 'PATCH',
       headers: {
         'Authorization': `Bearer ${process.env.AIRTABLE_TOKEN}`,
@@ -64,5 +80,14 @@ async function updateAirtableRecord(tagId, email) {
         }
       })
     });
+
+    if (!updateResponse.ok) {
+      throw new Error(`Airtable update failed: ${updateResponse.status}`);
+    }
+
+    console.log('Airtable update successful');
+  } catch (error) {
+    console.error('Error in updateAirtableRecord:', error);
+    throw error;
   }
 }
