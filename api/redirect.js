@@ -1,41 +1,45 @@
-const record = await getAirtableRecord(tagId);
+export const config = {
+  runtime: 'edge',
+};
+
+export default async function handler(request) {
+  try {
+    const url = new URL(request.url);
+    const tagId = url.pathname.slice(1);
+    const airtableUrl = `https://api.airtable.com/v0/${process.env.AIRTABLE_BASE_ID}/Foundit%20Tags`;
     
-    // If we can't get the record, default to sign-up page
-    if (!record) {
-      return new Response(null, {
-        status: 302,
-        headers: {
-          ...corsHeaders,
-          'Location': `https://foundit-tags.webflow.io/sign-up?tagId=${tagId}&error=connectivity`
-        }
-      });
-    }
-
-    const redirectUrl = record.fields['Status'] === 'Active' 
-      ? record.fields['WhatsApp URL']
-      : `https://foundit-tags.webflow.io/sign-up?tagId=${tagId}`;
-
-    return new Response(null, {
-      status: 302,
+    const filterFormula = encodeURIComponent(`{TagID}='${tagId}'`);
+    const response = await fetch(`${airtableUrl}?filterByFormula=${filterFormula}`, {
       headers: {
-        ...corsHeaders,
-        'Location': redirectUrl,
-        // Add cache control headers to help with international access
-        'Cache-Control': 'no-store, no-cache, must-revalidate, proxy-revalidate',
-        'Pragma': 'no-cache',
-        'Expires': '0',
+        'Authorization': `Bearer ${process.env.AIRTABLE_TOKEN}`,
+        'Content-Type': 'application/json'
       }
     });
 
+    const data = await response.json();
+    const record = data.records?.[0];
+
+    if (record?.fields['Status'] === 'Active') {
+      return new Response(null, {
+        status: 302,
+        headers: {
+          'Location': record.fields['WhatsApp URL']
+        }
+      });
+    } else {
+      return new Response(null, {
+        status: 302,
+        headers: {
+          'Location': `https://foundit-tags.webflow.io/sign-up?tagId=${tagId}`
+        }
+      });
+    }
   } catch (error) {
     console.error('Redirect error:', error);
-    
-    // In case of any error, redirect to sign-up page with error parameter
     return new Response(null, {
       status: 302,
       headers: {
-        ...corsHeaders,
-        'Location': 'https://foundit-tags.webflow.io/sign-up?error=unknown'
+        'Location': 'https://foundit-tags.webflow.io/sign-up'
       }
     });
   }
