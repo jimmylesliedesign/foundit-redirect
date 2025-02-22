@@ -103,12 +103,18 @@ function generateTagId() {
 function formatShippingAddress(address) {
   if (!address) return '';
   
-  return [
+  // Create formatted address parts
+  const addressParts = [
     address.line1,
     address.line2,
     address.city,
     address.state,
     address.postal_code,
     address.country
-  ].filter(Boolean).join('\n');
+  ];
+  
+  // Filter out null/empty values and join with commas and spaces
+  return addressParts
+    .filter(part => part && part.trim()) // Remove empty/null/whitespace values
+    .join(', ');
 }
