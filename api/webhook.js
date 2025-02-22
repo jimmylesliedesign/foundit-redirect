@@ -12,39 +12,26 @@ export default async function handler(request) {
     
     if (payload.type === 'checkout.session.completed') {
       const session = payload.data.object;
-
-      // Handle physical product purchase
+      
+      // Always try to activate if there's a client_reference_id
+      if (session.client_reference_id) {
+        const tagId = session.client_reference_id;
+        const email = session.customer_details.email;
+        await updateAirtableRecord(tagId, email);
+      }
+      
+      // Handle physical purchase if it's a physical_purchase type
       if (session.metadata?.type === 'physical_purchase') {
         try {
-          // Default to 1 if quantity not specified
           const quantity = parseInt(session.metadata.quantity) || 1;
-          
-          // Get shipping details from the correct location
           const shipping = {
             name: session.shipping?.name,
             address: session.shipping?.address
           };
-
           await createAirtableRecords(quantity, shipping, session);
-          
-          return new Response(JSON.stringify({ received: true, action: 'physical_purchase_processed' }), {
-            status: 200,
-            headers: { 'Content-Type': 'application/json' }
-          });
         } catch (error) {
-          return new Response(JSON.stringify({ error: `Physical purchase processing failed: ${error.message}` }), {
-            status: 500,
-            headers: { 'Content-Type': 'application/json' }
-          });
-        }
-      } 
-      // Handle tag activation (existing logic)
-      else if (session.client_reference_id) {
-        const tagId = session.client_reference_id;
-        const email = session.customer_details.email;
-        
-        if (tagId) {
-          await updateAirtableRecord(tagId, email);
+          console.error('Physical purchase processing failed:', error);
+          throw error;
         }
       }
     }
@@ -55,82 +42,58 @@ export default async function handler(request) {
     });
 
   } catch (error) {
+    console.error('Webhook processing error:', error);
     return new Response(JSON.stringify({ error: error.message }), { 
-      status: 500,
+      status: 400,
       headers: { 'Content-Type': 'application/json' }
     });
   }
 }
 
-async function createAirtableRecords(quantity, shipping, session) {
+async function updateAirtableRecord(tagId, email) {
   const airtableUrl = `https://api.airtable.com/v0/${process.env.AIRTABLE_BASE_ID}/Foundit%20Tags`;
+  const filterFormula = encodeURIComponent(`{TagID}='${tagId}'`);
   
-  const records = [];
-  for (let i = 0; i < quantity; i++) {
-    records.push({
-      fields: {
-        'TagID': generateTagId(),
-        'Status': 'Not Active',
-        'Shipping Name': shipping?.name || '',
-        'Shipping Address': formatShippingAddress(shipping?.address),
-        'Order Date': new Date().toISOString(),
-        'Email': session.customer_details?.email || ''
+  try {
+    console.log('Fetching Airtable records for tagId:', tagId);
+    const response = await fetch(`${airtableUrl}?filterByFormula=${filterFormula}`, {
+      headers: {
+        'Authorization': `Bearer ${process.env.AIRTABLE_TOKEN}`,
+        'Content-Type': 'application/json'
       }
     });
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new Error(`Airtable fetch failed: ${response.status} - ${errorText}`);
+    }
+    const data = await response.json();
+    console.log('Airtable response:', JSON.stringify(data, null, 2));
+    
+    if (!data.records?.length) {
+      throw new Error(`No record found for tagId: ${tagId}`);
+    }
+    const record = data.records[0];
+    const updateResponse = await fetch(`${airtableUrl}/${record.id}`, {
+      method: 'PATCH',
+      headers: {
+        'Authorization': `Bearer ${process.env.AIRTABLE_TOKEN}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        fields: {
+          'Status': 'Active',
+          'Email': email
+        }
+      })
+    });
+    if (!updateResponse.ok) {
+      const errorText = await updateResponse.text();
+      throw new Error(`Airtable update failed: ${updateResponse.status} - ${errorText}`);
+    }
+  } catch (error) {
+    console.error('Error in updateAirtableRecord:', error);
+    throw error;
   }
-
-  const response = await fetch(airtableUrl, {
-    method: 'POST',
-    headers: {
-      'Authorization': `Bearer ${process.env.AIRTABLE_TOKEN}`,
-      'Content-Type': 'application/json'
-    },
-    body: JSON.stringify({ records })
-  });
-
-  if (!response.ok) {
-    const errorText = await response.text();
-    throw new Error(`Airtable create failed: ${response.status} - ${errorText}`);
-  }
-
-  return response.json();
 }
 
-function generateTagId() {
-  // Define character sets, excluding similar-looking characters
-  const uppercaseChars = 'ABCDEFGHJKLMNPQRSTUVWXYZ';
-  const lowercaseChars = 'abcdefghjkmnpqrstuvwxyz';  // no l
-  const numbers = '23456789';  // no 0, 1
-  const allChars = uppercaseChars + lowercaseChars + numbers;
-  
-  // Generate 20 bytes of random data
-  const array = new Uint8Array(20);
-  crypto.getRandomValues(array);
-  
-  // Convert to our character set
-  let id = '';
-  for (let i = 0; i < 12; i++) {
-    id += allChars[array[i] % allChars.length];
-  }
-  
-  return id;
-}
-
-function formatShippingAddress(address) {
-  if (!address) return '';
-  
-  // Create formatted address parts
-  const addressParts = [
-    address.line1,
-    address.line2,
-    address.city,
-    address.state,
-    address.postal_code,
-    address.country
-  ];
-  
-  // Filter out null/empty values and join with commas and spaces
-  return addressParts
-    .filter(part => part && part.trim()) // Remove empty/null/whitespace values
-    .join(', ');
-}
+// Keep your existing createAirtableRecords and helper functions below
