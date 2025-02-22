@@ -97,8 +97,22 @@ async function createAirtableRecords(quantity, shipping, session) {
 }
 
 function generateTagId() {
-  const random = Math.random().toString(36).substring(2, 7).toUpperCase();
-  return `FDT-${random}`;
+  // Define a character set including uppercase, lowercase, numbers
+  // Excluding similar-looking characters (0, O, 1, l, I) to avoid confusion
+  const charset = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+  
+  // Generate 20 bytes of random data
+  const array = new Uint8Array(20);
+  crypto.getRandomValues(array);
+  
+  // Convert to our character set
+  let id = '';
+  for (let i = 0; i < 12; i++) {
+    // Use modulo to map the random bytes to our charset
+    id += charset[array[i] % charset.length];
+  }
+  
+  return id;
 }
 
 function formatShippingAddress(address) {
