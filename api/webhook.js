@@ -1,77 +1,75 @@
-async function generateSecureTagId() {
-  // Define character sets, excluding similar-looking characters
-  const uppercaseChars = 'ABCDEFGHJKLMNPQRSTUVWXYZ';
-  const lowercaseChars = 'abcdefghjkmnpqrstuvwxyz';
-  const numbers = '23456789';
-  const allChars = uppercaseChars + lowercaseChars + numbers;
-  
-  // Calculate how many bits of entropy we need per character
-  // log2(allChars.length) gives us bits per character
-  const bitsPerChar = Math.log2(allChars.length);
-  
-  // Generate enough random bytes for 16 characters
-  // We'll use 16 chars instead of 12 for more uniqueness
-  const numBytes = Math.ceil((16 * bitsPerChar) / 8);
-  const randomBytes = new Uint8Array(numBytes);
-  crypto.getRandomValues(randomBytes);
-  
-  let id = '';
-  let bitsUsed = 0;
-  let currentByte = 0;
-  
-  // Generate ID using unbiased bit extraction
-  while (id.length < 16) {
-    if (bitsUsed > 8) {
-      currentByte++;
-      bitsUsed = 0;
-    }
-    
-    // Use current byte as index, but only if it's within valid range
-    const index = randomBytes[currentByte] % allChars.length;
-    
-    // Only use the result if it's unbiased
-    if (randomBytes[currentByte] < (Math.floor(256 / allChars.length) * allChars.length)) {
-      id += allChars[index];
-    }
-    
-    bitsUsed += bitsPerChar;
+export const config = {
+  runtime: 'edge',
+};
+
+export default async function handler(request) {
+  if (request.method !== 'POST') {
+    return new Response('Method not allowed', { status: 405 });
   }
-  
-  // Add collision check with Airtable
-  const isDuplicate = await checkForDuplicate(id);
-  if (isDuplicate) {
-    // Recursively generate new ID if duplicate found
-    return generateSecureTagId();
+
+  try {
+    const payload = await request.json();
+    
+    if (payload.type === 'checkout.session.completed') {
+      const session = payload.data.object;
+
+      // Handle physical product purchase
+      if (session.metadata?.type === 'physical_purchase') {
+        try {
+          // Default to 1 if quantity not specified
+          const quantity = parseInt(session.metadata.quantity) || 1;
+          
+          // Get shipping details from the correct location
+          const shipping = {
+            name: session.shipping?.name,
+            address: session.shipping?.address
+          };
+
+          await createAirtableRecords(quantity, shipping, session);
+          
+          return new Response(JSON.stringify({ received: true, action: 'physical_purchase_processed' }), {
+            status: 200,
+            headers: { 'Content-Type': 'application/json' }
+          });
+        } catch (error) {
+          return new Response(JSON.stringify({ error: `Physical purchase processing failed: ${error.message}` }), {
+            status: 500,
+            headers: { 'Content-Type': 'application/json' }
+          });
+        }
+      } 
+      // Handle tag activation (existing logic)
+      else if (session.client_reference_id) {
+        const tagId = session.client_reference_id;
+        const email = session.customer_details.email;
+        
+        if (tagId) {
+          await updateAirtableRecord(tagId, email);
+        }
+      }
+    }
+
+    return new Response(JSON.stringify({ received: true }), {
+      status: 200,
+      headers: { 'Content-Type': 'application/json' }
+    });
+
+  } catch (error) {
+    return new Response(JSON.stringify({ error: error.message }), { 
+      status: 500,
+      headers: { 'Content-Type': 'application/json' }
+    });
   }
-  
-  return id;
 }
 
-async function checkForDuplicate(tagId) {
-  const airtableUrl = `https://api.airtable.com/v0/${process.env.AIRTABLE_BASE_ID}/Foundit%20Tags`;
-  const filterFormula = encodeURIComponent(`{TagID}='${tagId}'`);
-  
-  const response = await fetch(`${airtableUrl}?filterByFormula=${filterFormula}`, {
-    headers: {
-      'Authorization': `Bearer ${process.env.AIRTABLE_TOKEN}`,
-      'Content-Type': 'application/json'
-    }
-  });
-
-  const data = await response.json();
-  return data.records && data.records.length > 0;
-}
-
-// Update the createAirtableRecords function to use async generation
 async function createAirtableRecords(quantity, shipping, session) {
   const airtableUrl = `https://api.airtable.com/v0/${process.env.AIRTABLE_BASE_ID}/Foundit%20Tags`;
   
   const records = [];
   for (let i = 0; i < quantity; i++) {
-    const tagId = await generateSecureTagId(); // Now awaits the secure generation
     records.push({
       fields: {
-        'TagID': tagId,
+        'TagID': generateTagId(),
         'Status': 'Not Active',
         'Shipping Name': shipping?.name || '',
         'Shipping Address': formatShippingAddress(shipping?.address),
@@ -96,4 +94,43 @@ async function createAirtableRecords(quantity, shipping, session) {
   }
 
   return response.json();
+}
+
+function generateTagId() {
+  // Define character sets, excluding similar-looking characters
+  const uppercaseChars = 'ABCDEFGHJKLMNPQRSTUVWXYZ';
+  const lowercaseChars = 'abcdefghjkmnpqrstuvwxyz';  // no l
+  const numbers = '23456789';  // no 0, 1
+  const allChars = uppercaseChars + lowercaseChars + numbers;
+  
+  // Generate 20 bytes of random data
+  const array = new Uint8Array(20);
+  crypto.getRandomValues(array);
+  
+  // Convert to our character set
+  let id = '';
+  for (let i = 0; i < 12; i++) {
+    id += allChars[array[i] % allChars.length];
+  }
+  
+  return id;
+}
+
+function formatShippingAddress(address) {
+  if (!address) return '';
+  
+  // Create formatted address parts
+  const addressParts = [
+    address.line1,
+    address.line2,
+    address.city,
+    address.state,
+    address.postal_code,
+    address.country
+  ];
+  
+  // Filter out null/empty values and join with commas and spaces
+  return addressParts
+    .filter(part => part && part.trim()) // Remove empty/null/whitespace values
+    .join(', ');
 }
