@@ -12,11 +12,28 @@ export default async function handler(request) {
     
     if (payload.type === 'checkout.session.completed') {
       const session = payload.data.object;
-      const tagId = session.client_reference_id;
-      const email = session.customer_details.email;
-      
-      if (tagId) {
-        await updateAirtableRecord(tagId, email);
+
+      // Handle physical product purchase
+      if (session.metadata?.type === 'physical_purchase') {
+        try {
+          console.log('Processing physical purchase:', session.id);
+          const quantity = session.line_items?.data[0]?.quantity || 1;
+          const shipping = session.shipping_details;
+
+          await createAirtableRecords(quantity, shipping);
+        } catch (error) {
+          console.error('Error processing physical purchase:', error);
+          throw error;
+        }
+      } 
+      // Handle tag activation (existing logic)
+      else if (session.client_reference_id) {
+        const tagId = session.client_reference_id;
+        const email = session.customer_details.email;
+        
+        if (tagId) {
+          await updateAirtableRecord(tagId, email);
+        }
       }
     }
 
@@ -34,6 +51,7 @@ export default async function handler(request) {
   }
 }
 
+// Existing activation function
 async function updateAirtableRecord(tagId, email) {
   const airtableUrl = `https://api.airtable.com/v0/${process.env.AIRTABLE_BASE_ID}/Foundit%20Tags`;
   const filterFormula = encodeURIComponent(`{TagID}='${tagId}'`);
@@ -82,4 +100,64 @@ async function updateAirtableRecord(tagId, email) {
     console.error('Error in updateAirtableRecord:', error);
     throw error;
   }
+}
+
+// New function for creating records for physical purchases
+async function createAirtableRecords(quantity, shipping) {
+  const airtableUrl = `https://api.airtable.com/v0/${process.env.AIRTABLE_BASE_ID}/Foundit%20Tags`;
+  
+  try {
+    console.log('Creating Airtable records for quantity:', quantity);
+    const records = [];
+
+    for (let i = 0; i < quantity; i++) {
+      records.push({
+        fields: {
+          'TagID': generateTagId(),
+          'Status': 'Not Active',
+          'Shipping Name': shipping?.name || '',
+          'Shipping Address': formatShippingAddress(shipping?.address),
+          'Order Date': new Date().toISOString()
+        }
+      });
+    }
+
+    const response = await fetch(airtableUrl, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${process.env.AIRTABLE_TOKEN}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({ records })
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new Error(`Airtable create failed: ${response.status} - ${errorText}`);
+    }
+
+    console.log(`Successfully created ${quantity} new tag records`);
+  } catch (error) {
+    console.error('Error in createAirtableRecords:', error);
+    throw error;
+  }
+}
+
+// Helper functions for physical purchases
+function generateTagId() {
+  const random = Math.random().toString(36).substring(2, 7).toUpperCase();
+  return `FDT-${random}`;
+}
+
+function formatShippingAddress(address) {
+  if (!address) return '';
+  
+  return [
+    address.line1,
+    address.line2,
+    address.city,
+    address.state,
+    address.postal_code,
+    address.country
+  ].filter(Boolean).join('\n');
 }
