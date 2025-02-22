@@ -8,66 +8,52 @@ export default async function handler(request) {
   }
 
   try {
-    const payload = await request.json();
+    const formData = await request.formData();
     
-    if (payload.type === 'checkout.session.completed') {
-      const session = payload.data.object;
-      
-      // Handle tag activation
-      if (session.client_reference_id) {
-        const tagId = session.client_reference_id;
-        const email = session.customer_details.email;
-        await updateAirtableRecord(tagId, email);
-      }
-      
-      // Handle physical purchase
-      if (session.metadata?.type === 'physical_purchase') {
-        const quantity = parseInt(session.metadata.quantity) || 1;
-        const shipping = {
-          name: session.shipping?.name,
-          address: session.shipping?.address
-        };
-        await createAirtableRecords(quantity, shipping, session);
-      }
+    // Log all form fields we receive
+    const formFields = {};
+    for (const [key, value] of formData.entries()) {
+      formFields[key] = value;
+    }
+    console.log('Received form fields:', formFields);
+    
+    const tagId = formData.get('TagID');
+    if (!tagId) {
+      throw new Error('TagID is required');
     }
 
-    return new Response(JSON.stringify({ received: true }), {
-      status: 200,
-      headers: { 'Content-Type': 'application/json' }
-    });
+    // Get form values with exact Framer field names
+    const customerName = formData.get('full-name');
+    const trustedContact = formData.get('trusted-contact');
+    const phoneNumber = formData.get('phone-number');
 
-  } catch (error) {
-    console.error('Webhook processing error:', error);
-    return new Response(JSON.stringify({ error: error.message }), { 
-      status: 400,
-      headers: { 'Content-Type': 'application/json' }
-    });
-  }
-}
-
-async function updateAirtableRecord(tagId, email) {
-  const airtableUrl = `https://api.airtable.com/v0/${process.env.AIRTABLE_BASE_ID}/Foundit%20Tags`;
-  const filterFormula = encodeURIComponent(`{TagID}='${tagId}'`);
-  
-  try {
-    console.log('Fetching Airtable records for tagId:', tagId);
+    // Update Airtable with form details
+    const airtableUrl = `https://api.airtable.com/v0/${process.env.AIRTABLE_BASE_ID}/Foundit%20Tags`;
+    const filterFormula = encodeURIComponent(`{TagID}='${tagId}'`);
+    
     const response = await fetch(`${airtableUrl}?filterByFormula=${filterFormula}`, {
       headers: {
         'Authorization': `Bearer ${process.env.AIRTABLE_TOKEN}`,
         'Content-Type': 'application/json'
       }
     });
-    if (!response.ok) {
-      const errorText = await response.text();
-      throw new Error(`Airtable fetch failed: ${response.status} - ${errorText}`);
-    }
+
     const data = await response.json();
-    console.log('Airtable response:', JSON.stringify(data, null, 2));
-    
-    if (!data.records?.length) {
-      throw new Error(`No record found for tagId: ${tagId}`);
+    const record = data.records?.[0];
+
+    if (!record) {
+      return new Response(JSON.stringify({ error: 'Tag not found' }), {
+        status: 404,
+        headers: { 'Content-Type': 'application/json' }
+      });
     }
-    const record = data.records[0];
+
+    // Generate WhatsApp URL
+    const whatsappUrl = `https://wa.me/${phoneNumber}?text=${encodeURIComponent(
+      `Hi ${trustedContact}, I found ${customerName}'s phone! Let me know how I can return it.`
+    )}`;
+
+    // Update record with form data using exact Airtable column names
     const updateResponse = await fetch(`${airtableUrl}/${record.id}`, {
       method: 'PATCH',
       headers: {
@@ -76,88 +62,29 @@ async function updateAirtableRecord(tagId, email) {
       },
       body: JSON.stringify({
         fields: {
-          'Status': 'Active',
-          'Email': email
+          'Customer Name': customerName,
+          'Trusted Contact': trustedContact,
+          'Phone Number': phoneNumber,
+          'WhatsApp URL': whatsappUrl
         }
       })
     });
+
     if (!updateResponse.ok) {
       const errorText = await updateResponse.text();
-      throw new Error(`Airtable update failed: ${updateResponse.status} - ${errorText}`);
+      throw new Error(`Failed to update Airtable record: ${errorText}`);
     }
-  } catch (error) {
-    console.error('Error in updateAirtableRecord:', error);
-    throw error;
-  }
-}
 
-async function createAirtableRecords(quantity, shipping, session) {
-  const airtableUrl = `https://api.airtable.com/v0/${process.env.AIRTABLE_BASE_ID}/Foundit%20Tags`;
-  
-  const records = [];
-  for (let i = 0; i < quantity; i++) {
-    records.push({
-      fields: {
-        'TagID': generateTagId(),
-        'Status': 'Not Active',
-        'Email': session.customer_details?.email || '',
-        'Shipping Name': shipping?.name || '',
-        'Shipping Address': formatShippingAddress(shipping?.address),
-        'Order Date': new Date().toISOString()
-      }
+    return new Response(JSON.stringify({ success: true }), {
+      status: 200,
+      headers: { 'Content-Type': 'application/json' }
+    });
+
+  } catch (error) {
+    console.error('Form processing error:', error);
+    return new Response(JSON.stringify({ error: error.message }), { 
+      status: 400,
+      headers: { 'Content-Type': 'application/json' }
     });
   }
-
-  const response = await fetch(airtableUrl, {
-    method: 'POST',
-    headers: {
-      'Authorization': `Bearer ${process.env.AIRTABLE_TOKEN}`,
-      'Content-Type': 'application/json'
-    },
-    body: JSON.stringify({ records })
-  });
-
-  if (!response.ok) {
-    const errorText = await response.text();
-    throw new Error(`Airtable create failed: ${response.status} - ${errorText}`);
-  }
-
-  return response.json();
-}
-
-function generateTagId() {
-  // Define character sets, excluding similar-looking characters
-  const uppercaseChars = 'ABCDEFGHJKLMNPQRSTUVWXYZ';
-  const lowercaseChars = 'abcdefghjkmnpqrstuvwxyz';  // no l
-  const numbers = '23456789';  // no 0, 1
-  const allChars = uppercaseChars + lowercaseChars + numbers;
-  
-  // Generate random bytes
-  const array = new Uint8Array(20);
-  crypto.getRandomValues(array);
-  
-  // Convert to our character set
-  let id = '';
-  for (let i = 0; i < 12; i++) {
-    id += allChars[array[i] % allChars.length];
-  }
-  
-  return id;
-}
-
-function formatShippingAddress(address) {
-  if (!address) return '';
-  
-  const addressParts = [
-    address.line1,
-    address.line2,
-    address.city,
-    address.state,
-    address.postal_code,
-    address.country
-  ];
-  
-  return addressParts
-    .filter(part => part && part.trim())
-    .join(', ');
 }
