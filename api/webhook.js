@@ -97,9 +97,11 @@ async function createAirtableRecords(quantity, shipping, session) {
 }
 
 function generateTagId() {
-  // Define a character set including uppercase, lowercase, numbers
-  // Excluding similar-looking characters (0, O, 1, l, I) to avoid confusion
-  const charset = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+  // Define character sets, excluding similar-looking characters
+  const uppercaseChars = 'ABCDEFGHJKLMNPQRSTUVWXYZ';
+  const lowercaseChars = 'abcdefghjkmnpqrstuvwxyz';  // no l
+  const numbers = '23456789';  // no 0, 1
+  const allChars = uppercaseChars + lowercaseChars + numbers;
   
   // Generate 20 bytes of random data
   const array = new Uint8Array(20);
@@ -108,8 +110,7 @@ function generateTagId() {
   // Convert to our character set
   let id = '';
   for (let i = 0; i < 12; i++) {
-    // Use modulo to map the random bytes to our charset
-    id += charset[array[i] % charset.length];
+    id += allChars[array[i] % allChars.length];
   }
   
   return id;
