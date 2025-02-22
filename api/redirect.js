@@ -30,7 +30,7 @@ export default async function handler(request) {
       return new Response(null, {
         status: 302,
         headers: {
-          'Location': `https://foundit-tags.com/sign-up?tagId=${tagId}`
+          'Location': `https://foundit-tags.com/setup?tagId=${tagId}`
         }
       });
     }
@@ -39,7 +39,7 @@ export default async function handler(request) {
     return new Response(null, {
       status: 302,
       headers: {
-        'Location': 'https://foundit-tags.com/sign-up'
+        'Location': 'https://foundit-tags.com/setup'
       }
     });
   }
