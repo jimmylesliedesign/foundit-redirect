@@ -25,7 +25,7 @@ export default async function handler(request) {
             address: session.shipping?.address
           };
 
-          await createAirtableRecords(quantity, shipping);
+          await createAirtableRecords(quantity, shipping, session);
           
           return new Response(JSON.stringify({ received: true, action: 'physical_purchase_processed' }), {
             status: 200,
@@ -62,7 +62,7 @@ export default async function handler(request) {
   }
 }
 
-async function createAirtableRecords(quantity, shipping) {
+async function createAirtableRecords(quantity, shipping, session) {
   const airtableUrl = `https://api.airtable.com/v0/${process.env.AIRTABLE_BASE_ID}/Foundit%20Tags`;
   
   const records = [];
@@ -73,7 +73,8 @@ async function createAirtableRecords(quantity, shipping) {
         'Status': 'Not Active',
         'Shipping Name': shipping?.name || '',
         'Shipping Address': formatShippingAddress(shipping?.address),
-        'Order Date': new Date().toISOString()
+        'Order Date': new Date().toISOString(),
+        'Email': session.customer_details?.email || ''
       }
     });
   }
