@@ -12,12 +12,18 @@ export default async function handler(request) {
     
     if (payload.type === 'checkout.session.completed') {
       const session = payload.data.object;
-      const tagId = session.client_reference_id;
       const email = session.customer_details.email;
+      const shippingDetails = session.shipping_details;
       
-      if (tagId) {
-        await updateAirtableRecord(tagId, email);
+      if (!email || !shippingDetails) {
+        throw new Error('Missing required customer details');
       }
+
+      await createAirtableRecord({
+        email,
+        shippingName: shippingDetails.name,
+        shippingAddress: formatAddress(shippingDetails.address),
+      });
     }
 
     return new Response(JSON.stringify({ received: true }), {
@@ -26,6 +32,7 @@ export default async function handler(request) {
     });
 
   } catch (error) {
+    console.error('Purchase webhook error:', error);
     return new Response(JSON.stringify({ error: error.message }), { 
       status: 400,
       headers: { 'Content-Type': 'application/json' }
@@ -33,43 +40,49 @@ export default async function handler(request) {
   }
 }
 
-async function updateAirtableRecord(tagId, email) {
+function formatAddress(address) {
+  const parts = [
+    address.line1,
+    address.line2,
+    address.city,
+    address.state,
+    address.postal_code,
+    address.country
+  ].filter(Boolean);
+  
+  return parts.join(', ');
+}
+
+function generateTagId() {
+  // Generate a random string of 12 characters
+  const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
+  return Array.from({ length: 12 }, () => 
+    chars.charAt(Math.floor(Math.random() * chars.length))
+  ).join('');
+}
+
+async function createAirtableRecord({ email, shippingName, shippingAddress }) {
   const airtableUrl = `https://api.airtable.com/v0/${process.env.AIRTABLE_BASE_ID}/Foundit%20Tags`;
-  const filterFormula = encodeURIComponent(`{TagID}='${tagId}'`);
   
-  const response = await fetch(`${airtableUrl}?filterByFormula=${filterFormula}`, {
-    headers: {
-      'Authorization': `Bearer ${process.env.AIRTABLE_TOKEN}`,
-      'Content-Type': 'application/json'
-    }
-  });
-
-  if (!response.ok) {
-    throw new Error(`Airtable fetch failed: ${response.status}`);
-  }
-
-  const data = await response.json();
-  
-  if (!data.records?.length) {
-    throw new Error(`No record found for tagId: ${tagId}`);
-  }
-
-  const record = data.records[0];
-  const updateResponse = await fetch(`${airtableUrl}/${record.id}`, {
-    method: 'PATCH',
+  const response = await fetch(airtableUrl, {
+    method: 'POST',
     headers: {
       'Authorization': `Bearer ${process.env.AIRTABLE_TOKEN}`,
       'Content-Type': 'application/json'
     },
     body: JSON.stringify({
       fields: {
-        'Status': 'Active',
-        'Email': email
+        'TagID': generateTagId(),
+        'Status': 'Not Active',
+        'Email': email,
+        'Shipping Name': shippingName,
+        'Shipping Address': shippingAddress,
+        'Order Date': new Date().toISOString()
       }
     })
   });
 
-  if (!updateResponse.ok) {
-    throw new Error(`Airtable update failed: ${updateResponse.status}`);
+  if (!response.ok) {
+    throw new Error(`Airtable create failed: ${response.status}`);
   }
 }
