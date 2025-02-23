@@ -27,10 +27,10 @@ export default async function handler(request) {
       redirectUrl = record.fields['WhatsApp URL'];
     } else if (record?.fields['Order Date']) {
       // Case 2: Inactive but purchased -> No-payment setup form
-      redirectUrl = `https://foundit-tags.webflow.io/setup-purchased?tagId=${tagId}`;
+      redirectUrl = `https://foundit-tags.com/setup-purchased?tagId=${tagId}`;
     } else {
       // Case 3: Inactive and not purchased -> Payment required setup form
-      redirectUrl = `https://foundit-tags.webflow.io/setup?tagId=${tagId}`;
+      redirectUrl = `https://foundit-tags.com/setup?tagId=${tagId}`;
     }
 
     return new Response(null, {
@@ -43,7 +43,7 @@ export default async function handler(request) {
     return new Response(null, {
       status: 302,
       headers: {
-        'Location': 'https://foundit-tags.webflow.io/sign-up'
+        'Location': 'https://foundit-tags.com/sign-up'
       }
     });
   }
