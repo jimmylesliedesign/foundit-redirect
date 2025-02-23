@@ -15,9 +15,11 @@ export default async function handler(request) {
       const tagId = session.client_reference_id;
       const email = session.customer_details.email;
       
-      if (tagId) {
-        await updateAirtableRecord(tagId, email);
+      if (!tagId) {
+        throw new Error('No tagId provided in client_reference_id');
       }
+
+      await updateAirtableRecord(tagId, email);
     }
 
     return new Response(JSON.stringify({ received: true }), {
@@ -26,6 +28,7 @@ export default async function handler(request) {
     });
 
   } catch (error) {
+    console.error('Activation webhook error:', error);
     return new Response(JSON.stringify({ error: error.message }), { 
       status: 400,
       headers: { 'Content-Type': 'application/json' }
