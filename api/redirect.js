@@ -19,27 +19,31 @@ export default async function handler(request) {
     const data = await response.json();
     const record = data.records?.[0];
 
+    // Determine which URL to redirect to based on Status and Order Date
+    let redirectUrl;
+    
     if (record?.fields['Status'] === 'Active') {
-      return new Response(null, {
-        status: 302,
-        headers: {
-          'Location': record.fields['WhatsApp URL']
-        }
-      });
+      // Case 1: Active tag -> WhatsApp URL
+      redirectUrl = record.fields['WhatsApp URL'];
+    } else if (record?.fields['Order Date']) {
+      // Case 2: Inactive but purchased -> No-payment setup form
+      redirectUrl = `https://foundit-tags.webflow.io/setup-purchased?tagId=${tagId}`;
     } else {
-      return new Response(null, {
-        status: 302,
-        headers: {
-          'Location': `https://foundit-tags.com/setup?tagId=${tagId}`
-        }
-      });
+      // Case 3: Inactive and not purchased -> Payment required setup form
+      redirectUrl = `https://foundit-tags.webflow.io/setup?tagId=${tagId}`;
     }
+
+    return new Response(null, {
+      status: 302,
+      headers: { 'Location': redirectUrl }
+    });
+
   } catch (error) {
-    console.error('Redirect error:', error);
+    // Default redirect on error
     return new Response(null, {
       status: 302,
       headers: {
-        'Location': 'https://foundit-tags.com/setup'
+        'Location': 'https://foundit-tags.webflow.io/sign-up'
       }
     });
   }
