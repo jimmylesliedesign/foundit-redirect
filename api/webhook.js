@@ -56,6 +56,7 @@ export default async function handler(request) {
   }
 }
 
+// Activation flow - keep exactly as is to avoid any issues
 async function handleActivation(session) {
   const tagId = session.client_reference_id;
   const email = session.customer_details?.email;
@@ -133,6 +134,7 @@ function generateTagId() {
   ).join('');
 }
 
+// Modified purchase flow to handle quantities
 async function handlePurchase(session) {
   const email = session.customer_details?.email;
   const shippingDetails = session.shipping;
@@ -148,9 +150,44 @@ async function handlePurchase(session) {
     });
   }
 
-  // Create new Airtable record
-  const airtableUrl = `https://api.airtable.com/v0/${process.env.AIRTABLE_BASE_ID}/Foundit%20Tags`;
+  // Determine quantity from metadata or try to fetch it
+  let quantity = 1; // Default to 1
   
+  // First check if quantity is in metadata (easier approach if you can set this)
+  if (session.metadata?.quantity) {
+    quantity = parseInt(session.metadata.quantity, 10) || 1;
+  } 
+  // If no quantity in metadata, try to get it from Stripe API directly
+  else {
+    try {
+      // Only make this API call for purchase flow, not for activation
+      const sessionResponse = await fetch(`https://api.stripe.com/v1/checkout/sessions/${session.id}?expand[]=line_items`, {
+        headers: {
+          'Authorization': `Bearer ${process.env.STRIPE_SECRET_KEY}`,
+          'Content-Type': 'application/json'
+        }
+      });
+      
+      if (sessionResponse.ok) {
+        const fullSession = await sessionResponse.json();
+        
+        if (fullSession.line_items?.data?.length > 0) {
+          quantity = fullSession.line_items.data[0].quantity || 1;
+          console.log(`Retrieved quantity from Stripe API: ${quantity}`);
+        }
+      } else {
+        console.error(`Failed to retrieve session from Stripe: ${sessionResponse.status}`);
+      }
+    } catch (error) {
+      console.error(`Error retrieving session from Stripe: ${error.message}`);
+      // Continue with default quantity = 1
+    }
+  }
+  
+  console.log(`Creating ${quantity} Foundit tag records`);
+  
+  // Create Airtable records - one for each quantity
+  const airtableUrl = `https://api.airtable.com/v0/${process.env.AIRTABLE_BASE_ID}/Foundit%20Tags`;
   const address = shippingDetails.address;
   const formattedAddress = [
     address.line1,
@@ -160,37 +197,51 @@ async function handlePurchase(session) {
     address.postal_code,
     address.country
   ].filter(Boolean).join(', ');
-
-  const response = await fetch(airtableUrl, {
-    method: 'POST',
-    headers: {
-      'Authorization': `Bearer ${process.env.AIRTABLE_TOKEN}`,
-      'Content-Type': 'application/json'
-    },
-    body: JSON.stringify({
-      fields: {
-        'TagID': generateTagId(),
-        'Status': 'Not Active',
-        'Email': email,
-        'Shipping Name': shippingDetails.name,
-        'Shipping Address': formattedAddress,
-        'Order Date': new Date().toISOString()
+  
+  const currentDate = new Date().toISOString();
+  
+  // Create multiple records based on quantity
+  const createdRecords = [];
+  const errors = [];
+  
+  for (let i = 0; i < quantity; i++) {
+    try {
+      const response = await fetch(airtableUrl, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${process.env.AIRTABLE_TOKEN}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          fields: {
+            'TagID': generateTagId(),
+            'Status': 'Not Active',
+            'Email': email,
+            'Shipping Name': shippingDetails.name,
+            'Shipping Address': formattedAddress,
+            'Order Date': currentDate
+          }
+        })
+      });
+      
+      if (!response.ok) {
+        throw new Error(`Airtable create failed for record ${i+1}: ${response.status}`);
       }
-    })
-  });
-
-  if (!response.ok) {
-    throw new Error(`Airtable create failed: ${response.status}`);
+      
+      const data = await response.json();
+      createdRecords.push(data);
+    } catch (error) {
+      errors.push(`Error creating record ${i+1}: ${error.message}`);
+    }
   }
-
-  const data = await response.json();
   
   return new Response(JSON.stringify({ 
-    success: true,
-    message: 'Purchase recorded successfully',
-    record: data
+    success: errors.length === 0,
+    message: `Purchase recorded: created ${createdRecords.length} of ${quantity} records`,
+    records: createdRecords,
+    errors: errors.length > 0 ? errors : undefined
   }), {
-    status: 200,
+    status: errors.length === 0 ? 200 : 207, // Using 207 Multi-Status for partial success
     headers: { 'Content-Type': 'application/json' }
   });
 }
