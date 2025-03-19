@@ -6,6 +6,17 @@ export default async function handler(request) {
   try {
     const url = new URL(request.url);
     const tagId = url.pathname.slice(1);
+    
+    // Check if tagId is empty (just found-it.co/)
+    if (!tagId || tagId.trim() === '') {
+      return new Response(null, {
+        status: 302,
+        headers: {
+          'Location': 'https://foundit-tags.com'
+        }
+      });
+    }
+    
     const airtableUrl = `https://api.airtable.com/v0/${process.env.AIRTABLE_BASE_ID}/Foundit%20Tags`;
     
     const filterFormula = encodeURIComponent(`{TagID}='${tagId}'`);
@@ -43,7 +54,7 @@ export default async function handler(request) {
     return new Response(null, {
       status: 302,
       headers: {
-        'Location': 'https://foundit-tags.com/sign-up'
+        'Location': 'https://foundit-tags.com'
       }
     });
   }
